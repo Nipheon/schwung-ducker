@@ -1,0 +1,110 @@
+/*
+ * Ducker envelope: replaces Schwung's generic envelope graphic over the Attack,
+ * Hold and Release cells. It draws the duck (down on attack, low through hold,
+ * back up on release, shaped by Curve) and, at its right end, a meter showing
+ * how much the signal is being ducked right now. Full bar = no ducking; the
+ * lowest the bar goes is the hold level, which is empty only at Depth 100%.
+ *
+ * The DSP publishes the last trigger as "duck_info" (epoch ms, see
+ * get_param("duck_info") in ducker.c): the note-on time, when the release
+ * starts, the depth, curve and attack/release times. Schwung only reads that
+ * value a few times a second, so the meter replays the envelope from the
+ * wall clock instead of sampling it. Same maths as shape_curve() in ducker.c.
+ */
+
+function shape(curve, t, isRelease) {
+    t = Math.max(0, Math.min(1, t));
+    if (curve === 1) return t * t;
+    if (curve === 2) return t * t * (3 - 2 * t);
+    if (curve === 3 && isRelease) {
+        const inv = 1 - t;
+        return 1 - inv * inv * inv;
+    }
+    return t;
+}
+
+/* 1 = no ducking, 1 - depth = full duck. */
+function duckLevel(info, nowMs) {
+    const p = String(info || "").split(",").map(Number);
+    if (p.length < 6 || p.some((x) => !Number.isFinite(x))) return 1;
+    const [t0, trel, depth, curve, attackMs, releaseMs] = p;
+    if (!(t0 > 0) || nowMs < t0) return 1;
+    const releasing = trel > 0 && nowMs >= trel;
+    if (!releasing) {
+        const el = nowMs - t0;
+        if (attackMs > 0 && el < attackMs) return 1 - depth * shape(curve, el / attackMs, false);
+        return 1 - depth;
+    }
+    const r = nowMs - trel;
+    if (releaseMs <= 0 || r >= releaseMs) return 1;
+    return 1 - depth + depth * shape(curve, r / releaseMs, true);
+}
+
+const CURVE_NAMES = ["linear", "expo", "s-curve", "pump"];
+
+function curveIndex(raw) {
+    const i = CURVE_NAMES.indexOf(String(raw).toLowerCase());
+    if (i >= 0) return i;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.max(0, Math.min(3, Math.round(n))) : 0;
+}
+
+function num(values, key, dflt) {
+    const n = values ? Number(values[key]) : NaN;
+    return Number.isFinite(n) ? n : dflt;
+}
+
+function drawDuckEnvelope(ctx, { values, nowMs }) {
+    const w = ctx.width, h = ctx.height;
+    if (w < 24 || h < 7) return;
+
+    const attack = num(values, "attack", 0.1);
+    const hold = num(values, "hold", 0.2);
+    const release = num(values, "release", 0.3);
+    const depth = Math.max(0, Math.min(1, num(values, "depth", 1)));
+    const curve = curveIndex(values && values.curve);
+    const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+    const level = Math.max(0, Math.min(1, duckLevel(values && values.duck_info, now)));
+
+    /* Meter at the right end: a framed bar, filled from the bottom. */
+    const barW = 8;
+    const barX = w - barW;
+    ctx.fillRect(barX, 0, barW, 1, 1);
+    ctx.fillRect(barX, h - 1, barW, 1, 1);
+    ctx.fillRect(barX, 0, 1, h, 1);
+    ctx.fillRect(w - 1, 0, 1, h, 1);
+    const innerH = h - 4;
+    const fill = Math.round(innerH * level);
+    ctx.fillRect(barX + 2, 2 + (innerH - fill), barW - 4, fill, 1);
+
+    /* The duck on a true time axis: the full width is one beat (a quarter
+     * note at the current tempo), so the right edge is the next kick. Longer
+     * ducks run off the edge. Notches along the bottom mark 16th notes. */
+    const plotW = barX - 3;
+    const bpm = num(values, "tempo", 120);
+    const beatMs = 60000 / Math.max(20, Math.min(300, bpm));
+    const attackMs = attack * 50, holdMs = hold * 500, releaseMs = release * 1000;
+    const plotH = h - 2;
+    for (let x = 0; x < plotW; x++) {
+        const t = (x + 0.5) / plotW * beatMs;
+        let lvl;
+        if (t < attackMs) lvl = 1 - depth * shape(curve, t / attackMs, false);
+        else if (t < attackMs + holdMs) lvl = 1 - depth;
+        else if (t < attackMs + holdMs + releaseMs) lvl = 1 - depth + depth * shape(curve, (t - attackMs - holdMs) / releaseMs, true);
+        else lvl = 1;
+        const y = 1 + Math.round((1 - lvl) * (plotH - 1));
+        ctx.fillRect(x, y, 1, h - 1 - y, 1);                  /* solid fill under the line */
+    }
+    for (let i = 1; i < 4; i++) ctx.fillRect(Math.round(plotW * i / 4), h - 2, 1, 2, 0);
+}
+
+/* Two empty cells: page 2's Filter row leaves knobs 3 and 4 unused. Schwung
+ * 1.7.3 drops null knob slots, so the page is padded with blank widgets. */
+function drawBlank() {}
+
+globalThis.canvas_overlay = {
+    widgetKinds: {
+        "custom:duckenv": drawDuckEnvelope,
+        "custom:blank": drawBlank,
+    },
+};
