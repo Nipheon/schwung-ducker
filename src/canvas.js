@@ -5,12 +5,16 @@
  * how much the signal is being ducked right now. Full bar = no ducking; the
  * lowest the bar goes is the hold level, which is empty only at Depth 100%.
  *
- * The DSP publishes the last trigger as "duck_info" (epoch ms, see
- * get_param("duck_info") in ducker.c): the note-on time, when the release
- * starts, the depth, curve and attack/release times. Schwung only reads that
- * value a few times a second, so the meter replays the envelope from the
- * wall clock instead of sampling it. Same maths as shape_curve() in ducker.c.
+ * The level comes from "duck_level", "<level>,<epoch ms>", which the DSP
+ * declares live: a Schwung that reads live extra keys refreshes it every tick.
+ * An older Schwung only reads it on its slow value rotation, so the reading is
+ * usually stale; the time stamp tells the two apart, and a stale reading falls
+ * back to "duck_info", the last trigger (note-on time, release start, depth,
+ * curve, attack/release times), replayed from the wall clock. Same maths as
+ * shape_curve() in ducker.c.
  */
+
+const FRESH_MS = 150;   /* a live reading is a tick or two old; a rotation read is not */
 
 function shape(curve, t, isRelease) {
     t = Math.max(0, Math.min(1, t));
@@ -64,7 +68,10 @@ function drawDuckEnvelope(ctx, { values, nowMs }) {
     const depth = Math.max(0, Math.min(1, num(values, "depth", 1)));
     const curve = curveIndex(values && values.curve);
     const now = Number.isFinite(nowMs) ? nowMs : Date.now();
-    const level = Math.max(0, Math.min(1, duckLevel(values && values.duck_info, now)));
+    const live = String((values && values.duck_level) || "").split(",").map(Number);
+    const fresh = live.length === 2 && Number.isFinite(live[0]) && Number.isFinite(live[1]) &&
+        Math.abs(now - live[1]) <= FRESH_MS;
+    const level = Math.max(0, Math.min(1, fresh ? live[0] : duckLevel(values && values.duck_info, now)));
 
     /* Meter at the right end: a framed bar, filled from the bottom. */
     const barW = 8;

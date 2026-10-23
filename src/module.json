@@ -213,7 +213,8 @@
                 "extra_keys": [
                   "duck_info",
                   "curve",
-                  "tempo"
+                  "tempo",
+                  "duck_level"
                 ]
               }
             },

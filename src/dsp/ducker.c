@@ -122,6 +122,31 @@ static double now_ms(void) {
     return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
 }
 
+/*
+ * How much the last trigger is ducking right now (1 = none, 1 - depth = full),
+ * replayed from wall-clock time like the UI meter replays duck_info, so it
+ * stays right when the slot is silent and process_block is not running. Same
+ * maths as the envelope in v2_process_block; shape_curve is defined below.
+ */
+static float shape_curve(int curve, float t, int is_release);
+
+static float duck_level_now(ducker_instance_t *inst) {
+    double now = now_ms();
+    if (inst->trig_ms <= 0 || now < inst->trig_ms) return 1.0f;
+
+    if (!(inst->release_ms > 0 && now >= inst->release_ms)) {
+        double el = now - inst->trig_ms;
+        if (inst->trig_attack_ms > 0 && el < inst->trig_attack_ms) {
+            return 1.0f - inst->trig_depth * shape_curve(inst->trig_curve, (float)(el / inst->trig_attack_ms), 0);
+        }
+        return 1.0f - inst->trig_depth;
+    }
+    double r = now - inst->release_ms;
+    if (inst->trig_release_ms <= 0 || r >= inst->trig_release_ms) return 1.0f;
+    return (1.0f - inst->trig_depth) +
+           inst->trig_depth * shape_curve(inst->trig_curve, (float)(r / inst->trig_release_ms), 1);
+}
+
 static void ducker_log(const char *msg) {
     if (g_host && g_host->log) {
         char buf[256];
@@ -708,6 +733,15 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
 
     /* Empty cells on page 2 (drawn blank by canvas.js) */
     if (strcmp(key, "gap_a") == 0 || strcmp(key, "gap_b") == 0) return snprintf(buf, buf_len, "%s", "");
+    /*
+     * "duck_level" is declared live, so a Schwung that supports live extra keys
+     * reads duck_level:effective every tick. The value is "<level>,<epoch ms>";
+     * the time stamp lets the meter tell a fresh reading from the slow
+     * rotation read an older Schwung falls back to.
+     */
+    if (strcmp(key, "duck_level") == 0 || strcmp(key, "duck_level:effective") == 0) {
+        return snprintf(buf, buf_len, "%.3f,%.0f", duck_level_now(inst), now_ms());
+    }
     if (strcmp(key, "duck_info") == 0) {
         return snprintf(buf, buf_len, "%.0f,%.0f,%.3f,%d,%.1f,%.1f",
             inst->trig_ms, inst->release_ms, inst->trig_depth, inst->trig_curve,
@@ -774,7 +808,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
             "{\"key\":\"mode\",\"name\":\"Mode\",\"type\":\"enum\",\"options\":[\"Trigger\",\"Gate\"],\"default\":\"Trigger\"},"
             "{\"key\":\"depth\",\"name\":\"Depth\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":1,\"step\":0.01},"
             "{\"key\":\"attack\",\"name\":\"Attack\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":0.1,\"step\":0.01,"
-                "\"viz\":{\"group\":\"duck\",\"role\":\"attack\",\"kind\":\"custom:duckenv\",\"extra_keys\":[\"duck_info\",\"curve\",\"tempo\"]}},"
+                "\"viz\":{\"group\":\"duck\",\"role\":\"attack\",\"kind\":\"custom:duckenv\",\"extra_keys\":[\"duck_info\",\"curve\",\"tempo\",\"duck_level\"]}},"
             "{\"key\":\"hold\",\"name\":\"Hold\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":0.2,\"step\":0.01,"
                 "\"viz\":{\"group\":\"duck\",\"role\":\"hold\"}},"
             "{\"key\":\"release\",\"name\":\"Release\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":0.3,\"step\":0.01,"
@@ -790,6 +824,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
             "{\"key\":\"vel_sens\",\"name\":\"Vel Sens\",\"short_name\":\"sens\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":0,\"step\":0.01},"
             "{\"key\":\"duck_info\",\"name\":\"Duck\",\"type\":\"string\",\"access\":\"read\"},"
             "{\"key\":\"tempo\",\"name\":\"Tempo\",\"type\":\"string\",\"access\":\"read\"},"
+            "{\"key\":\"duck_level\",\"name\":\"Duck level\",\"type\":\"string\",\"access\":\"read\",\"live\":true},"
             "{\"key\":\"gap_a\",\"name\":\" \",\"type\":\"string\",\"access\":\"read\","
                 "\"viz\":{\"group\":\"gap\",\"role\":\"a\",\"kind\":\"custom:blank\"}},"
             "{\"key\":\"gap_b\",\"name\":\" \",\"type\":\"string\",\"access\":\"read\","
