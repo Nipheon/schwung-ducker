@@ -18,6 +18,7 @@
 #include "audio_fx_api_v2.h"
 
 #define SAMPLE_RATE 44100
+#define INV_REST_GLIDE 0.0023f  /* one-pole step, about 10 ms: no click when the transport starts or stops */
 
 /* Envelope phases */
 enum {
@@ -117,6 +118,7 @@ typedef struct ducker_instance {
     float envelope;       /* current envelope value: 1.0=pass, 0.0=max duck */
     int active_notes;     /* count of held notes (for gate mode) */
     float attack_t0;      /* where on the attack curve this trigger starts (0 = from open) */
+    float inv_rest;       /* Volume Inv resting gain, glides between 1 - Depth and 1 (transport stopped) */
 
     /* Last trigger, published as "duck_info" so the UI meter can replay the
      * envelope from wall-clock time (see canvas.js). Times are epoch ms. */
@@ -388,6 +390,7 @@ static void* v2_create_instance(const char *module_dir, const char *config_json)
     filter_update_coeffs(inst, 0.0f);
     inst->phase = PHASE_IDLE;
     inst->envelope = 1.0f;
+    inst->inv_rest = 1.0f;
     inst->active_notes = 0;
 
     ducker_log("Instance created");
@@ -404,6 +407,13 @@ static void v2_destroy_instance(void *instance) {
 static void v2_process_block(void *instance, int16_t *audio_inout, int frames) {
     ducker_instance_t *inst = (ducker_instance_t *)instance;
     if (!inst) return;
+
+    /* Volume Inv rests below unity, which would mute the track whenever no
+     * trigger arrives. Only a running transport earns that rest; stopped or
+     * unknown, it passes the signal through. */
+    int running = g_host && g_host->get_clock_status &&
+                  g_host->get_clock_status() == MOVE_CLOCK_STATUS_RUNNING;
+    float rest_target = running ? 1.0f - inst->depth : 1.0f;
 
     for (int i = 0; i < frames; i++) {
         /* Advance envelope */
@@ -507,7 +517,8 @@ static void v2_process_block(void *instance, int16_t *audio_inout, int frames) {
              * opens it up: the same envelope, read as how far it has ducked. */
             float gain = inst->envelope;
             if (inst->target == TARGET_VOLUME_INV) {
-                gain = clampf((1.0f - inst->depth) + (1.0f - inst->envelope), 0.0f, 1.0f);
+                inst->inv_rest += (rest_target - inst->inv_rest) * INV_REST_GLIDE;
+                gain = clampf(inst->inv_rest + (1.0f - inst->envelope), 0.0f, 1.0f);
             }
             l = (float)audio_inout[i * 2] * gain;
             r = (float)audio_inout[i * 2 + 1] * gain;
