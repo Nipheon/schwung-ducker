@@ -41,6 +41,12 @@ enum {
     MODE_GATE
 };
 
+/* What a new trigger does to an envelope that is still running */
+enum {
+    RETRIG_HARD = 0,   /* restart from fully open */
+    RETRIG_SOFT        /* continue from the current duck level */
+};
+
 /* What the envelope controls */
 enum {
     TARGET_VOLUME = 0,
@@ -83,6 +89,7 @@ typedef struct ducker_instance {
     float release;        /* 0.0-1.0 → 0-1000ms */
     int curve;            /* CURVE_* */
     float vel_sens;       /* 0.0-1.0 */
+    int retrig;           /* RETRIG_HARD or RETRIG_SOFT */
     int target;           /* TARGET_VOLUME, TARGET_FILTER or TARGET_VOLUME_INV */
     int filter_type;      /* FILTER_* */
     int cut1;             /* 0-127 freq index: cutoff while idle */
@@ -103,12 +110,14 @@ typedef struct ducker_instance {
     float vel_depth;      /* computed depth for current trigger */
     float envelope;       /* current envelope value: 1.0=pass, 0.0=max duck */
     int active_notes;     /* count of held notes (for gate mode) */
+    float attack_t0;      /* where on the attack curve this trigger starts (0 = from open) */
 
     /* Last trigger, published as "duck_info" so the UI meter can replay the
      * envelope from wall-clock time (see canvas.js). Times are epoch ms. */
     double trig_ms;       /* note-on time, 0 = never triggered */
     double release_ms;    /* when the release starts, 0 = not known yet (gate held) */
     float trig_depth;
+    float trig_t0;        /* attack_t0 of the last trigger */
     int trig_curve;
     float trig_attack_ms;
     float trig_release_ms;
@@ -138,7 +147,8 @@ static float duck_level_now(ducker_instance_t *inst) {
     if (!(inst->release_ms > 0 && now >= inst->release_ms)) {
         double el = now - inst->trig_ms;
         if (inst->trig_attack_ms > 0 && el < inst->trig_attack_ms) {
-            return 1.0f - inst->trig_depth * shape_curve(inst->trig_curve, (float)(el / inst->trig_attack_ms), 0);
+            float t = inst->trig_t0 + (float)(el / inst->trig_attack_ms);
+            return 1.0f - inst->trig_depth * shape_curve(inst->trig_curve, t > 1.0f ? 1.0f : t, 0);
         }
         return 1.0f - inst->trig_depth;
     }
@@ -236,6 +246,29 @@ static float shape_curve(int curve, float t, int is_release) {
     case CURVE_LINEAR:
     default:
         return t;
+    }
+}
+
+/*
+ * Where on the attack curve a duck of this fraction (0-1) of the depth sits:
+ * the inverse of shape_curve's attack side. A soft retrigger starts there, so
+ * the sweep from the current level keeps the curve's own slope.
+ */
+static float attack_start_fraction(int curve, float f) {
+    f = clampf(f, 0.0f, 1.0f);
+    switch (curve) {
+    case CURVE_EXPO:
+        return sqrtf(f);
+    case CURVE_SCURVE: {
+        float lo = 0.0f, hi = 1.0f;
+        for (int k = 0; k < 24; k++) {
+            float mid = 0.5f * (lo + hi);
+            if (shape_curve(CURVE_SCURVE, mid, 0) < f) lo = mid; else hi = mid;
+        }
+        return 0.5f * (lo + hi);
+    }
+    default:
+        return f;   /* linear, and pump's linear attack */
     }
 }
 
@@ -340,6 +373,7 @@ static void* v2_create_instance(const char *module_dir, const char *config_json)
     inst->release = 0.3f;     /* 300ms */
     inst->curve = CURVE_LINEAR;
     inst->vel_sens = 0.0f;
+    inst->retrig = RETRIG_SOFT;
     inst->target = TARGET_VOLUME;
     inst->filter_type = FILTER_LP24;
     inst->cut1 = 114;             /* 90% of the range, ~10kHz: idle cutoff */
@@ -370,7 +404,9 @@ static void v2_process_block(void *instance, int16_t *audio_inout, int frames) {
         switch (inst->phase) {
         case PHASE_ATTACK: {
             if (inst->phase_len > 0) {
-                float t = (float)inst->phase_pos / (float)inst->phase_len;
+                /* A soft retrigger starts partway up the curve (attack_t0) and
+                 * reaches full duck early; the phase still lasts the full attack. */
+                float t = inst->attack_t0 + (float)inst->phase_pos / (float)inst->phase_len;
                 float shaped = shape_curve(inst->curve, t, 0);
                 /* Attack ducks down: envelope goes from 1.0 to (1.0 - vel_depth) */
                 inst->envelope = 1.0f - inst->vel_depth * shaped;
@@ -510,11 +546,23 @@ static void ducker_on_midi(void *instance, const uint8_t *msg, int len, int sour
         }
         inst->vel_depth = inst->depth * vel_scale;
 
+        /* Soft: carry on from the current duck level. A hit that asks for less
+         * than is already ducked keeps the deeper level. Hard restarts from open. */
+        inst->attack_t0 = 0.0f;
+        if (inst->retrig == RETRIG_SOFT) {
+            float ducked = 1.0f - inst->envelope;
+            if (ducked > inst->vel_depth) inst->vel_depth = ducked;
+            if (inst->vel_depth > 0.0f) {
+                inst->attack_t0 = attack_start_fraction(inst->curve, ducked / inst->vel_depth);
+            }
+        }
+
         start_attack(inst);
 
         float attack_ms = inst->attack * 50.0f;
         inst->trig_ms = now_ms();
         inst->trig_depth = inst->vel_depth;
+        inst->trig_t0 = inst->attack_t0;
         inst->trig_curve = inst->curve;
         inst->trig_attack_ms = attack_ms;
         inst->trig_release_ms = inst->release * 1000.0f;
@@ -569,6 +617,12 @@ static int parse_mode(const char *val) {
     return (atof(val) > 0.5f) ? MODE_GATE : MODE_TRIGGER;
 }
 
+static int parse_retrig(const char *val) {
+    if (strcmp(val, "Hard") == 0) return RETRIG_HARD;
+    if (strcmp(val, "Soft") == 0) return RETRIG_SOFT;
+    return (atof(val) > 0.5f) ? RETRIG_SOFT : RETRIG_HARD;
+}
+
 static int parse_target(const char *val) {
     if (strcmp(val, "Volume") == 0) return TARGET_VOLUME;
     if (strcmp(val, "Filter") == 0) return TARGET_FILTER;
@@ -621,6 +675,8 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
         inst->curve = parse_curve(val);
     } else if (strcmp(key, "vel_sens") == 0) {
         inst->vel_sens = clampf((float)atof(val), 0.0f, 1.0f);
+    } else if (strcmp(key, "retrig") == 0) {
+        inst->retrig = parse_retrig(val);
     } else if (strcmp(key, "target") == 0) {
         int target = parse_target(val);
         if (target != inst->target) reset_filter_state(inst);
@@ -673,6 +729,14 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
         if (json_get_number(val, "vel_sens", &fval) == 0) {
             inst->vel_sens = clampf(fval, 0.0f, 1.0f);
         }
+        /* A Set saved before Retrig existed has no key: it keeps the old
+         * restart-from-open behaviour, only a new Ducker starts Soft. */
+        inst->retrig = RETRIG_HARD;
+        if (json_get_string(val, "retrig", sval, sizeof(sval)) == 0) {
+            inst->retrig = parse_retrig(sval);
+        } else if (json_get_number(val, "retrig", &fval) == 0) {
+            inst->retrig = (int)clampf(fval, 0.0f, 1.0f);
+        }
         if (json_get_string(val, "target", sval, sizeof(sval)) == 0) {
             inst->target = parse_target(sval);
         } else if (json_get_number(val, "target", &fval) == 0) {
@@ -715,6 +779,10 @@ static const char *mode_name(int mode) {
     return (mode == MODE_GATE) ? "Gate" : "Trigger";
 }
 
+static const char *retrig_name(int retrig) {
+    return (retrig == RETRIG_SOFT) ? "Soft" : "Hard";
+}
+
 static const char *target_name(int target) {
     if (target == TARGET_FILTER) return "Filter";
     if (target == TARGET_VOLUME_INV) return "Volume Inv";
@@ -739,6 +807,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
     if (strcmp(key, "release") == 0) return snprintf(buf, buf_len, "%.2f", inst->release);
     if (strcmp(key, "curve") == 0) return snprintf(buf, buf_len, "%s", curve_name(inst->curve));
     if (strcmp(key, "vel_sens") == 0) return snprintf(buf, buf_len, "%.2f", inst->vel_sens);
+    if (strcmp(key, "retrig") == 0) return snprintf(buf, buf_len, "%s", retrig_name(inst->retrig));
     if (strcmp(key, "target") == 0) return snprintf(buf, buf_len, "%s", target_name(inst->target));
     if (strcmp(key, "filter_type") == 0) return snprintf(buf, buf_len, "%s", filter_type_name(inst->filter_type));
     if (strcmp(key, "cut1") == 0) return snprintf(buf, buf_len, "%d", inst->cut1);
@@ -762,9 +831,9 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
         return snprintf(buf, buf_len, "%.3f,%.0f", duck_level_now(inst), now_ms());
     }
     if (strcmp(key, "duck_info") == 0) {
-        return snprintf(buf, buf_len, "%.0f,%.0f,%.3f,%d,%.1f,%.1f",
+        return snprintf(buf, buf_len, "%.0f,%.0f,%.3f,%d,%.1f,%.1f,%.3f",
             inst->trig_ms, inst->release_ms, inst->trig_depth, inst->trig_curve,
-            inst->trig_attack_ms, inst->trig_release_ms);
+            inst->trig_attack_ms, inst->trig_release_ms, inst->trig_t0);
     }
     if (strcmp(key, "name") == 0) return snprintf(buf, buf_len, "DUCKER");
 
@@ -772,11 +841,11 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
         return snprintf(buf, buf_len,
             "{\"channel\":%d,\"trigger_note\":%d,\"mode\":%d,"
             "\"depth\":%.3f,\"attack\":%.3f,\"hold\":%.3f,\"release\":%.3f,"
-            "\"curve\":%d,\"vel_sens\":%.3f,"
+            "\"curve\":%d,\"vel_sens\":%.3f,\"retrig\":%d,"
             "\"target\":%d,\"filter_type\":%d,\"cut1\":%d,\"cut2\":%d,\"resonance\":%.3f}",
             inst->channel, inst->trigger_note, inst->mode,
             inst->depth, inst->attack, inst->hold, inst->release,
-            inst->curve, inst->vel_sens,
+            inst->curve, inst->vel_sens, inst->retrig,
             inst->target, inst->filter_type, inst->cut1, inst->cut2, inst->resonance);
     }
 
@@ -794,14 +863,14 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
                 "\"volume_page\":{"
                     "\"label\":\"Volume\",\"children\":null,"
                     "\"visible_if\":{\"param\":\"target\",\"not_equals\":\"Filter\"},"
-                    "\"knobs\":[\"curve\",\"vel_sens\"],"
-                    "\"params\":[\"curve\",\"vel_sens\"]"
+                    "\"knobs\":[\"curve\",\"vel_sens\",\"retrig\"],"
+                    "\"params\":[\"curve\",\"vel_sens\",\"retrig\"]"
                 "},"
                 "\"filter_page\":{"
                     "\"label\":\"Filter\",\"children\":null,"
                     "\"visible_if\":{\"param\":\"target\",\"equals\":\"Filter\"},"
-                    "\"knobs\":[\"curve\",\"vel_sens\",\"gap_a\",\"gap_b\",\"cut1\",\"cut2\",\"resonance\",\"filter_type\"],"
-                    "\"params\":[\"curve\",\"vel_sens\",\"cut1\",\"cut2\",\"resonance\",\"filter_type\"]"
+                    "\"knobs\":[\"curve\",\"vel_sens\",\"retrig\",\"gap_b\",\"cut1\",\"cut2\",\"resonance\",\"filter_type\"],"
+                    "\"params\":[\"curve\",\"vel_sens\",\"retrig\",\"cut1\",\"cut2\",\"resonance\",\"filter_type\"]"
                 "}"
             "}"
         "}";
@@ -841,13 +910,12 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
             "{\"key\":\"resonance\",\"name\":\"Res\",\"type\":\"float\",\"min\":0,\"max\":0.9,\"default\":0.2,\"step\":0.01},"
             "{\"key\":\"filter_type\",\"name\":\"Type\",\"type\":\"enum\",\"options\":[\"LP12\",\"LP24\",\"HP12\",\"HP24\"],\"default\":\"LP24\"},"
             "{\"key\":\"vel_sens\",\"name\":\"Vel Sens\",\"short_name\":\"sens\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":0,\"step\":0.01},"
+            "{\"key\":\"retrig\",\"name\":\"Retrig\",\"short_name\":\"retrig\",\"type\":\"enum\",\"options\":[\"Hard\",\"Soft\"],\"default\":\"Soft\"},"
             "{\"key\":\"duck_info\",\"name\":\"Duck\",\"type\":\"string\",\"access\":\"read\"},"
             "{\"key\":\"tempo\",\"name\":\"Tempo\",\"type\":\"string\",\"access\":\"read\"},"
             "{\"key\":\"duck_level\",\"name\":\"Duck level\",\"type\":\"string\",\"access\":\"read\",\"live\":true},"
-            "{\"key\":\"gap_a\",\"name\":\" \",\"type\":\"string\",\"access\":\"read\","
-                "\"viz\":{\"group\":\"gap\",\"role\":\"a\",\"kind\":\"custom:blank\"}},"
             "{\"key\":\"gap_b\",\"name\":\" \",\"type\":\"string\",\"access\":\"read\","
-                "\"viz\":{\"group\":\"gap\",\"role\":\"b\"}}"
+                "\"viz\":{\"kind\":\"custom:blank\"}}"
         "]");
         return (len > 0 && len < buf_len) ? len : -1;
     }

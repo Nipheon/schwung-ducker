@@ -10,8 +10,8 @@
  * An older Schwung only reads it on its slow value rotation, so the reading is
  * usually stale; the time stamp tells the two apart, and a stale reading falls
  * back to "duck_info", the last trigger (note-on time, release start, depth,
- * curve, attack/release times), replayed from the wall clock. Same maths as
- * shape_curve() in ducker.c.
+ * curve, attack/release times, where a soft retrigger starts on the attack
+ * curve), replayed from the wall clock. Same maths as shape_curve() in ducker.c.
  */
 
 const FRESH_MS = 150;   /* a live reading is a tick or two old; a rotation read is not */
@@ -32,11 +32,13 @@ function duckLevel(info, nowMs) {
     const p = String(info || "").split(",").map(Number);
     if (p.length < 6 || p.some((x) => !Number.isFinite(x))) return 1;
     const [t0, trel, depth, curve, attackMs, releaseMs] = p;
+    /* Where on the attack curve a soft retrigger started; absent (0) = from open */
+    const startFrac = p.length > 6 ? p[6] : 0;
     if (!(t0 > 0) || nowMs < t0) return 1;
     const releasing = trel > 0 && nowMs >= trel;
     if (!releasing) {
         const el = nowMs - t0;
-        if (attackMs > 0 && el < attackMs) return 1 - depth * shape(curve, el / attackMs, false);
+        if (attackMs > 0 && el < attackMs) return 1 - depth * shape(curve, startFrac + el / attackMs, false);
         return 1 - depth;
     }
     const r = nowMs - trel;

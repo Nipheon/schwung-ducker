@@ -80,7 +80,11 @@
             " S-Curve, or Pump",
             "",
             "Knob 2: Vel Sens",
-            " see Velocity"
+            " see Velocity",
+            "",
+            "Knob 3: Retrig",
+            " Hard or Soft, see",
+            " Retrigger"
           ]
         },
         {
@@ -88,6 +92,7 @@
           "lines": [
             "Knob 1: Curve",
             "Knob 2: Vel Sens",
+            "Knob 3: Retrig",
             "",
             "Knob 5: Cut1",
             " Cutoff while idle",
@@ -129,6 +134,29 @@
             "the full Depth and a",
             "velocity near 0 gets",
             "almost none."
+          ]
+        },
+        {
+          "title": "Retrigger",
+          "lines": [
+            "A new note while the",
+            "duck is still running:",
+            "",
+            "Hard: restart from",
+            " fully open (the old",
+            " behaviour).",
+            "",
+            "Soft: carry on from",
+            " the current level.",
+            " The sweep keeps its",
+            " slope, so the duck",
+            " always ends at the",
+            " same time after the",
+            " kick. A hit asking",
+            " for less depth than",
+            " is already ducked",
+            " keeps the deeper",
+            " level."
           ]
         }
       ]
