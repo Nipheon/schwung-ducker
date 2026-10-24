@@ -20,18 +20,22 @@
         "Filter sweeping",
         "between two cutoffs.",
         "Volume Inv rests at",
-        "1 - Depth and opens",
-        "up to full on each",
-        "trigger.",
+        "1 - Depth; a trigger",
+        "opens it up, to full",
+        "at velocity 127.",
         "",
         "The envelope graphic",
         "shows the duck over",
         "one beat (1/4 note)",
         "at the current BPM;",
         "notches = 16ths.",
-        "Its meter: full bar =",
-        "no ducking; lowest",
-        "bar = the hold level."
+        "Its meter shows the",
+        "volume: full bar = no",
+        "ducking, lowest = the",
+        "hold level. Volume",
+        "Inv is the other way",
+        "up: low at rest, full",
+        "on each trigger."
       ]
     },
     {

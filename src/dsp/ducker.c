@@ -73,7 +73,13 @@ enum {
 #define FREQ_MIN_HZ 20.0f
 #define FREQ_MAX_HZ 20000.0f
 #define FILTER_MAX_HZ 20000.0f
-#define RESONANCE_MAX 0.9f   /* top of the Res knob; above this the peak clips easily */
+/* Top of the Res knob. The resonant peak is about +20 dB (12 dB types) or +15 dB
+ * (24 dB types) here and there is no gain compensation, so a loud input clips at
+ * the int16 clamp well before the top of the knob. */
+#define RESONANCE_MAX 0.9f
+#define CUT1_DEFAULT 114      /* 90% of the range, ~10kHz: idle cutoff */
+#define CUT2_DEFAULT 13       /* 10% of the range, ~40Hz: cutoff at full duck */
+#define RESONANCE_DEFAULT 0.2f
 #define FILTER_COEF_STEP 8  /* samples between filter coefficient updates */
 
 typedef struct ducker_instance {
@@ -199,7 +205,7 @@ static int json_get_string(const char *json, const char *key, char *out, int out
 /* --- Envelope helpers --- */
 
 static inline float clampf(float x, float lo, float hi) {
-    if (x < lo) return lo;
+    if (!(x >= lo)) return lo;   /* also catches NaN, which would latch in the filter state */
     if (x > hi) return hi;
     return x;
 }
@@ -376,9 +382,9 @@ static void* v2_create_instance(const char *module_dir, const char *config_json)
     inst->retrig = RETRIG_SOFT;
     inst->target = TARGET_VOLUME;
     inst->filter_type = FILTER_LP24;
-    inst->cut1 = 114;             /* 90% of the range, ~10kHz: idle cutoff */
-    inst->cut2 = 13;              /* 10% of the range, ~40Hz: cutoff at full duck */
-    inst->resonance = 0.2f;
+    inst->cut1 = CUT1_DEFAULT;
+    inst->cut2 = CUT2_DEFAULT;
+    inst->resonance = RESONANCE_DEFAULT;
     filter_update_coeffs(inst, 0.0f);
     inst->phase = PHASE_IDLE;
     inst->envelope = 1.0f;
@@ -737,6 +743,14 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
         } else if (json_get_number(val, "retrig", &fval) == 0) {
             inst->retrig = (int)clampf(fval, 0.0f, 1.0f);
         }
+        /* A state from before the Filter target has none of these keys. Restoring
+         * it onto a running instance (a bus effect keeps its instance) must give
+         * the defaults, not whatever the instance had. */
+        inst->target = TARGET_VOLUME;
+        inst->filter_type = FILTER_LP24;
+        inst->cut1 = CUT1_DEFAULT;
+        inst->cut2 = CUT2_DEFAULT;
+        inst->resonance = RESONANCE_DEFAULT;
         if (json_get_string(val, "target", sval, sizeof(sval)) == 0) {
             inst->target = parse_target(sval);
         } else if (json_get_number(val, "target", &fval) == 0) {
@@ -819,13 +833,14 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
         return snprintf(buf, buf_len, "%.1f", clampf(bpm, 20.0f, 300.0f));
     }
 
-    /* Empty cells on page 2 (drawn blank by canvas.js) */
-    if (strcmp(key, "gap_a") == 0 || strcmp(key, "gap_b") == 0) return snprintf(buf, buf_len, "%s", "");
+    /* The empty cell on the Filter page, knob 4 (drawn blank by canvas.js) */
+    if (strcmp(key, "gap_b") == 0) return snprintf(buf, buf_len, "%s", "");
     /*
-     * "duck_level" is declared live, so a Schwung that supports live extra keys
-     * reads duck_level:effective every tick. The value is "<level>,<epoch ms>";
-     * the time stamp lets the meter tell a fresh reading from the slow
-     * rotation read an older Schwung falls back to.
+     * "duck_level" is declared live. A Schwung with live extra keys
+     * (charlesvestal/schwung#668, not in 1.7.3) reads duck_level:effective every
+     * tick; 1.7.3 ignores the flag and reads it on the slow value rotation. The
+     * value is "<level>,<epoch ms>"; the time stamp lets the meter tell a fresh
+     * reading from a rotation read.
      */
     if (strcmp(key, "duck_level") == 0 || strcmp(key, "duck_level:effective") == 0) {
         return snprintf(buf, buf_len, "%.3f,%.0f", duck_level_now(inst), now_ms());

@@ -4,14 +4,18 @@
  * back up on release, shaped by Curve) and, at its right end, a meter showing
  * how much the signal is being ducked right now. Full bar = no ducking; the
  * lowest the bar goes is the hold level, which is empty only at Depth 100%.
+ * Volume Inv shows the resulting volume the other way up: low at rest, full on
+ * a trigger. The graph draws the nominal full-velocity shape; the meter follows
+ * the velocity of the last hit, like the sound.
  *
  * The level comes from "duck_level", "<level>,<epoch ms>", which the DSP
- * declares live: a Schwung that reads live extra keys refreshes it every tick.
- * An older Schwung only reads it on its slow value rotation, so the reading is
- * usually stale; the time stamp tells the two apart, and a stale reading falls
- * back to "duck_info", the last trigger (note-on time, release start, depth,
- * curve, attack/release times, where a soft retrigger starts on the attack
- * curve), replayed from the wall clock. Same maths as shape_curve() in ducker.c.
+ * declares live: a Schwung that reads live extra keys (charlesvestal/schwung#668)
+ * refreshes it every tick. Schwung 1.7.3 only reads it on its slow value
+ * rotation, so the reading is usually stale; the time stamp tells the two apart,
+ * and a stale reading falls back to "duck_info", the last trigger (note-on
+ * time, release start, depth, curve, attack/release times, where a soft
+ * retrigger starts on the attack curve), replayed from the wall clock. Same
+ * maths as shape_curve() in ducker.c.
  */
 
 const FRESH_MS = 150;   /* a live reading is a tick or two old; a rotation read is not */
@@ -112,8 +116,8 @@ function drawDuckEnvelope(ctx, { values, nowMs }) {
     for (let i = 1; i < 4; i++) ctx.fillRect(Math.round(plotW * i / 4), h - 2, 1, 2, 0);
 }
 
-/* Two empty cells: page 2's Filter row leaves knobs 3 and 4 unused. Schwung
- * 1.7.3 drops null knob slots, so the page is padded with blank widgets. */
+/* One empty cell: page 2's Filter row leaves knob 4 unused (knob 3 is Retrig).
+ * Schwung 1.7.3 drops null knob slots, so the page is padded with a blank widget. */
 function drawBlank() {}
 
 globalThis.canvas_overlay = {
