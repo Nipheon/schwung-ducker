@@ -381,7 +381,13 @@ static void v2_process_block(void *instance, int16_t *audio_inout, int frames) {
                 inst->phase = PHASE_HOLD;
                 inst->phase_pos = 0;
                 inst->phase_len = hold_samples(inst);
-                if (inst->phase_len <= 0 && inst->mode == MODE_TRIGGER) {
+                /* Trigger mode: no hold means release. Gate mode: a note that
+                 * ended during the attack was let finish, so release now. */
+                int release_now = (inst->mode == MODE_TRIGGER)
+                    ? inst->phase_len <= 0
+                    : inst->active_notes == 0;
+                if (release_now) {
+                    if (inst->release_ms <= 0) inst->release_ms = now_ms();
                     inst->phase = PHASE_RELEASE;
                     inst->phase_pos = 0;
                     inst->phase_len = release_samples(inst);
@@ -521,8 +527,12 @@ static void ducker_on_midi(void *instance, const uint8_t *msg, int len, int sour
         if (inst->active_notes > 0) inst->active_notes--;
 
         if (inst->mode == MODE_GATE && inst->active_notes == 0) {
-            /* Gate mode: release on last note-off */
-            if (inst->phase == PHASE_HOLD || inst->phase == PHASE_ATTACK) {
+            /* Gate mode: release on last note-off. A note shorter than the
+             * attack (a drum hit) lets the attack finish first, so every hit
+             * ducks the same; the release starts when the attack ends. */
+            if (inst->phase == PHASE_ATTACK) {
+                inst->release_ms = inst->trig_ms + inst->trig_attack_ms;
+            } else if (inst->phase == PHASE_HOLD) {
                 start_release(inst);
                 inst->release_ms = now_ms();
             }
