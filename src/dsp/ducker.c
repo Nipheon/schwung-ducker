@@ -44,6 +44,7 @@ enum {
 /* What the envelope controls */
 enum {
     TARGET_VOLUME = 0,
+    TARGET_VOLUME_INV,   /* same order as the options: a number from the host is an index */
     TARGET_FILTER
 };
 
@@ -82,7 +83,7 @@ typedef struct ducker_instance {
     float release;        /* 0.0-1.0 → 0-1000ms */
     int curve;            /* CURVE_* */
     float vel_sens;       /* 0.0-1.0 */
-    int target;           /* TARGET_VOLUME or TARGET_FILTER */
+    int target;           /* TARGET_VOLUME, TARGET_FILTER or TARGET_VOLUME_INV */
     int filter_type;      /* FILTER_* */
     int cut1;             /* 0-127 freq index: cutoff while idle */
     int cut2;             /* 0-127 freq index: cutoff at full duck (hold) */
@@ -454,8 +455,12 @@ static void v2_process_block(void *instance, int16_t *audio_inout, int frames) {
             l = out[0];
             r = out[1];
         } else {
-            /* Apply gain */
+            /* Apply gain. Volume inverted rests at 1 - Depth and the trigger
+             * opens it up: the same envelope, read as how far it has ducked. */
             float gain = inst->envelope;
+            if (inst->target == TARGET_VOLUME_INV) {
+                gain = clampf((1.0f - inst->depth) + (1.0f - inst->envelope), 0.0f, 1.0f);
+            }
             l = (float)audio_inout[i * 2] * gain;
             r = (float)audio_inout[i * 2 + 1] * gain;
         }
@@ -557,7 +562,9 @@ static int parse_mode(const char *val) {
 static int parse_target(const char *val) {
     if (strcmp(val, "Volume") == 0) return TARGET_VOLUME;
     if (strcmp(val, "Filter") == 0) return TARGET_FILTER;
-    return (atof(val) > 0.5f) ? TARGET_FILTER : TARGET_VOLUME;
+    if (strcmp(val, "Volume Inv") == 0) return TARGET_VOLUME_INV;
+    int idx = (int)(atof(val) + 0.5f);
+    return idx < 0 ? 0 : (idx > TARGET_FILTER ? TARGET_FILTER : idx);
 }
 
 static int parse_freq(const char *val) {
@@ -659,7 +666,7 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
         if (json_get_string(val, "target", sval, sizeof(sval)) == 0) {
             inst->target = parse_target(sval);
         } else if (json_get_number(val, "target", &fval) == 0) {
-            inst->target = (int)clampf(fval, 0.0f, 1.0f);
+            inst->target = (int)clampf(fval, 0.0f, (float)TARGET_FILTER);
         }
         if (json_get_string(val, "filter_type", sval, sizeof(sval)) == 0) {
             inst->filter_type = parse_filter_type(sval);
@@ -699,7 +706,9 @@ static const char *mode_name(int mode) {
 }
 
 static const char *target_name(int target) {
-    return (target == TARGET_FILTER) ? "Filter" : "Volume";
+    if (target == TARGET_FILTER) return "Filter";
+    if (target == TARGET_VOLUME_INV) return "Volume Inv";
+    return "Volume";
 }
 
 static const char *filter_type_name(int type) {
@@ -774,7 +783,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
                 "},"
                 "\"volume_page\":{"
                     "\"label\":\"Volume\",\"children\":null,"
-                    "\"visible_if\":{\"param\":\"target\",\"equals\":\"Volume\"},"
+                    "\"visible_if\":{\"param\":\"target\",\"not_equals\":\"Filter\"},"
                     "\"knobs\":[\"curve\",\"vel_sens\"],"
                     "\"params\":[\"curve\",\"vel_sens\"]"
                 "},"
@@ -813,7 +822,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
                 "\"viz\":{\"group\":\"duck\",\"role\":\"hold\"}},"
             "{\"key\":\"release\",\"name\":\"Release\",\"type\":\"float\",\"min\":0,\"max\":1,\"default\":0.3,\"step\":0.01,"
                 "\"viz\":{\"group\":\"duck\",\"role\":\"release\"}},"
-            "{\"key\":\"target\",\"name\":\"Target\",\"type\":\"enum\",\"options\":[\"Volume\",\"Filter\"],\"default\":\"Volume\"},"
+            "{\"key\":\"target\",\"name\":\"Target\",\"type\":\"enum\",\"options\":[\"Volume\",\"Volume Inv\",\"Filter\"],\"default\":\"Volume\"},"
             "{\"key\":\"curve\",\"name\":\"Curve\",\"type\":\"enum\",\"options\":[\"Linear\",\"Expo\",\"S-Curve\",\"Pump\"],\"default\":\"Linear\"},"
             "{\"key\":\"cut1\",\"name\":\"Cut1\",\"type\":\"int\",\"min\":0,\"max\":127,\"default\":114,\"step\":1,"
                 "\"card_script\":\"cards.js#freq_card\"},"

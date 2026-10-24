@@ -71,7 +71,12 @@ function drawDuckEnvelope(ctx, { values, nowMs }) {
     const live = String((values && values.duck_level) || "").split(",").map(Number);
     const fresh = live.length === 2 && Number.isFinite(live[0]) && Number.isFinite(live[1]) &&
         Math.abs(now - live[1]) <= FRESH_MS;
-    const level = Math.max(0, Math.min(1, fresh ? live[0] : duckLevel(values && values.duck_info, now)));
+    const duck = Math.max(0, Math.min(1, fresh ? live[0] : duckLevel(values && values.duck_info, now)));
+    /* Volume Inv rests at 1 - Depth and opens up on a trigger: the same envelope
+     * read as how far it has ducked. The meter and graph show the resulting gain. */
+    const inverted = String((values && values.target) || "") === "Volume Inv";
+    const gainOf = (lvl) => (inverted ? Math.max(0, Math.min(1, 1 - depth + (1 - lvl))) : lvl);
+    const level = gainOf(duck);
 
     /* Meter at the right end: a framed bar, filled from the bottom. */
     const barW = 8;
@@ -99,7 +104,7 @@ function drawDuckEnvelope(ctx, { values, nowMs }) {
         else if (t < attackMs + holdMs) lvl = 1 - depth;
         else if (t < attackMs + holdMs + releaseMs) lvl = 1 - depth + depth * shape(curve, (t - attackMs - holdMs) / releaseMs, true);
         else lvl = 1;
-        const y = 1 + Math.round((1 - lvl) * (plotH - 1));
+        const y = 1 + Math.round((1 - gainOf(lvl)) * (plotH - 1));
         ctx.fillRect(x, y, 1, h - 1 - y, 1);                  /* solid fill under the line */
     }
     for (let i = 1; i < 4; i++) ctx.fillRect(Math.round(plotW * i / 4), h - 2, 1, 2, 0);

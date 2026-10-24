@@ -252,6 +252,7 @@
               "type": "enum",
               "options": [
                 "Volume",
+                "Volume Inv",
                 "Filter"
               ],
               "default": "Volume"
@@ -280,7 +281,7 @@
           "label": "Volume",
           "visible_if": {
             "param": "target",
-            "equals": "Volume"
+            "not_equals": "Filter"
           },
           "knobs": [
             "curve",
