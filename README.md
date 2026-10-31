@@ -10,41 +10,56 @@ MIDI-triggered sidechain ducker for [Schwung](https://github.com/charlesvestal/s
 
 Load as an audio FX on the slot to duck. Set **Channel** and **Trigger** to the kick's MIDI channel and note (set the drum track's MIDI Out with Shift + Track). Only that note on that channel triggers.
 
-## Controls
+## Main page
 
-| Page | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-|---|---|---|---|---|---|---|---|---|
-| **Main** | Channel | Trigger | Mode | Depth | Attack | Hold | Release | Target |
-| **Volume** | Curve | Vel Sens | Retrig | | | | | |
-| **Filter** | Curve | Vel Sens | Retrig | | Cut1 | Cut2 | Res | Type |
-
-The second page follows Target: **Filter** for Filter, **Volume** otherwise.
-
-| Control | Range | Default | Notes |
-|---|---|---|---|
-| Channel | Omni, 1-16 | 1 | |
-| Trigger | C-2 to G8 | C1 (36) | |
-| Mode | Trigger, Gate | Trigger | Gate: duck holds while the note is held, Hold is ignored |
-| Depth | 0-100% | 100% | |
-| Attack | 0-50 ms | 5 ms | |
-| Hold | 0-500 ms | 100 ms | |
-| Release | 0-1000 ms | 300 ms | |
-| Target | Volume, Volume Inv, Filter | Volume | |
-| Curve | Linear, Expo, S-Curve, Pump | Linear | Applies to attack and release. Pump: linear attack, ease-out release |
-| Vel Sens | 0-100% | 0% | At 100%, velocity 127 gets full Depth |
-| Retrig | Hard, Soft | Soft | See below |
-| Cut1 | 20 Hz-20 kHz | 9.9 kHz | Cutoff at rest |
-| Cut2 | 20 Hz-20 kHz | 41 Hz | Cutoff at full Depth |
-| Res | 0-90% | 20% | |
-| Type | LP12, LP24, HP12, HP24 | LP24 | |
+| Knob | Control | Range | Default | Notes |
+|---|---|---|---|---|
+| 1 | Channel | Omni, 1-16 | 1 | |
+| 2 | Trigger | C-2 to G8 | C1 (36) | |
+| 3 | Mode | Trigger, Gate | Trigger | Gate: the duck stays down while the note is held and releases on note-off. The envelope's Hold time (knob 6) is not used |
+| 4 | Depth | 0-100% | 100% | |
+| 5 | Attack | 0-50 ms | 5 ms | |
+| 6 | Hold | 0-500 ms | 100 ms | |
+| 7 | Release | 0-1000 ms | 300 ms | |
+| 8 | Target | Volume, Volume Inv, Filter | Volume | Picks what the envelope moves, and which second page appears |
 
 ## Targets
 
 - **Volume**: ducks the gain by Depth.
 - **Volume Inv**: rests at 1 - Depth and opens to full on each trigger. Rests only while the transport runs; stopped, the signal passes at full level.
-- **Filter**: sweeps the cutoff from Cut1 towards Cut2 by Depth, in octaves. For high-pass, set Cut1 low and Cut2 high. Cutoffs have 128 log steps; hold a cutoff knob to see Hz.
+- **Filter**: sweeps the cutoff from Cut1 towards Cut2 by Depth, in octaves. For high-pass, set Cut1 low and Cut2 high.
+
+## Second page: Volume and Volume Inv
+
+| Knob | Control | Range | Default | Notes |
+|---|---|---|---|---|
+| 1 | Curve | Linear, Expo, S-Curve, Pump | Linear | Shapes attack and release. Pump: linear attack, ease-out release |
+| 2 | Vel Sens | 0-100% | 0% | See below |
+| 3 | Retrig | Hard, Soft | Soft | See below |
+
+## Second page: Filter
+
+| Knob | Control | Range | Default | Notes |
+|---|---|---|---|---|
+| 1 | Curve | Linear, Expo, S-Curve, Pump | Linear | As on the Volume page |
+| 2 | Vel Sens | 0-100% | 0% | As on the Volume page |
+| 3 | Retrig | Hard, Soft | Soft | As on the Volume page |
+| 5 | Cut1 | 20 Hz-20 kHz | 9.9 kHz | Cutoff at rest |
+| 6 | Cut2 | 20 Hz-20 kHz | 41 Hz | Cutoff at full Depth |
+| 7 | Res | 0-90% | 20% | |
+| 8 | Type | LP12, LP24, HP12, HP24 | LP24 | |
+
+Cutoffs have 128 log steps; hold a cutoff knob to see Hz.
 
 ![Cut2 card over the Filter page: Cut2, 41 Hz](docs/filter-cutoff-card.png)
+
+## Vel Sens
+
+How much the trigger's velocity scales Depth:
+
+- **0%**: every hit ducks by the full Depth.
+- **50%**: velocity 127 gets the full Depth, velocity 0 half of it.
+- **100%**: depth follows velocity: 127 gets the full Depth, 64 about half, 0 none.
 
 ## Retrig
 
