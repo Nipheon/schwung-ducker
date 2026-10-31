@@ -26,8 +26,19 @@ Load as an audio FX on the slot to duck. Set **Channel** and **Trigger** to the 
 ## Targets
 
 - **Volume**: ducks the gain by Depth.
+  - Pump: chords, pads or a whole mix breathing with the kick. Pump curve, Release near the kick interval.
+  - Mix clearance: bass or sustained parts make room for the kick. Low Depth, short Release, Linear or Expo.
+  - Tails: placed after a reverb or delay in the slot's chain, the wet tail ducks with the dry signal and blooms between hits.
 - **Volume Inv**: rests at 1 - Depth and opens to full on each trigger. Rests only while the transport runs; stopped, the signal passes at full level.
-- **Filter**: sweeps the cutoff from Cut1 towards Cut2 by Depth, in octaves. For high-pass, set Cut1 low and Cut2 high.
+  - Kick-keyed gate: a pad, noise bed or drone only speaks on each hit, shaped by Release.
+  - Layering: a sustained sub or noise layer becomes a tail glued to the kick.
+  - Trance gate: program the trigger note as a 16th pattern, with short Hold and Release.
+- **Filter**: sweeps the cutoff from Cut1 towards Cut2 by Depth, in octaves.
+  - Low-end ducking: HP, Cut1 at 20 Hz, Cut2 around 100-150 Hz. Only the bass's low end gets out of the kick's way; the upper harmonics stay, so it is less audible than a volume duck.
+  - Filter pump: LP from bright to dark on each kick. Movement without the level drop.
+  - Accents: resonance up, short Attack and Release, triggered on offbeats.
+
+The trigger note does not have to sound. A note on an otherwise silent track or pad works as a ghost trigger, so the rhythm of the duck is free of the drums.
 
 ## Second page: Volume and Volume Inv
 
