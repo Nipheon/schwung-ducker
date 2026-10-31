@@ -116,13 +116,8 @@ function drawDuckEnvelope(ctx, { values, nowMs }) {
     for (let i = 1; i < 4; i++) ctx.fillRect(Math.round(plotW * i / 4), h - 2, 1, 2, 0);
 }
 
-/* One empty cell: page 2's Filter row leaves knob 4 unused (knob 3 is Retrig).
- * Schwung 1.7.3 drops null knob slots, so the page is padded with a blank widget. */
-function drawBlank() {}
-
 globalThis.canvas_overlay = {
     widgetKinds: {
         "custom:duckenv": drawDuckEnvelope,
-        "custom:blank": drawBlank,
     },
 };

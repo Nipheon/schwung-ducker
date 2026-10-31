@@ -335,7 +335,7 @@
             "curve",
             "vel_sens",
             "retrig",
-            "gap_b",
+            null,
             "cut1",
             "cut2",
             "resonance",

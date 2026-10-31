@@ -844,8 +844,6 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
         return snprintf(buf, buf_len, "%.1f", clampf(bpm, 20.0f, 300.0f));
     }
 
-    /* The empty cell on the Filter page, knob 4 (drawn blank by canvas.js) */
-    if (strcmp(key, "gap_b") == 0) return snprintf(buf, buf_len, "%s", "");
     /*
      * "duck_level" is declared live. A Schwung with live extra keys
      * (charlesvestal/schwung#668, not in 1.7.3) reads duck_level:effective every
@@ -895,7 +893,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
                 "\"filter_page\":{"
                     "\"label\":\"Filter\",\"children\":null,"
                     "\"visible_if\":{\"param\":\"target\",\"equals\":\"Filter\"},"
-                    "\"knobs\":[\"curve\",\"vel_sens\",\"retrig\",\"gap_b\",\"cut1\",\"cut2\",\"resonance\",\"filter_type\"],"
+                    "\"knobs\":[\"curve\",\"vel_sens\",\"retrig\",null,\"cut1\",\"cut2\",\"resonance\",\"filter_type\"],"
                     "\"params\":[\"curve\",\"vel_sens\",\"retrig\",\"cut1\",\"cut2\",\"resonance\",\"filter_type\"]"
                 "}"
             "}"
@@ -939,9 +937,7 @@ static int v2_get_param(void *instance, const char *key, char *buf, int buf_len)
             "{\"key\":\"retrig\",\"name\":\"Retrig\",\"short_name\":\"retrig\",\"type\":\"enum\",\"options\":[\"Hard\",\"Soft\"],\"default\":\"Soft\"},"
             "{\"key\":\"duck_info\",\"name\":\"Duck\",\"type\":\"string\",\"access\":\"read\"},"
             "{\"key\":\"tempo\",\"name\":\"Tempo\",\"type\":\"string\",\"access\":\"read\"},"
-            "{\"key\":\"duck_level\",\"name\":\"Duck level\",\"type\":\"string\",\"access\":\"read\",\"live\":true},"
-            "{\"key\":\"gap_b\",\"name\":\" \",\"type\":\"string\",\"access\":\"read\","
-                "\"viz\":{\"kind\":\"custom:blank\"}}"
+            "{\"key\":\"duck_level\",\"name\":\"Duck level\",\"type\":\"string\",\"access\":\"read\",\"live\":true}"
         "]");
         return (len > 0 && len < buf_len) ? len : -1;
     }
