@@ -1,18 +1,14 @@
 # Ducker
 
-MIDI-triggered sidechain ducker for [Schwung](https://github.com/charlesvestal/schwung) on Ableton Move. Classic pumping without an audio sidechain: a MIDI note, usually the kick, ducks the signal and lets it come back. The duck can work on the volume, on the volume turned upside down, or as a filter sweep.
+MIDI-triggered sidechain ducker for [Schwung](https://github.com/charlesvestal/schwung) on Ableton Move. A MIDI note, usually the kick, triggers an envelope that ducks the volume, opens an inverted volume, or sweeps a filter. No audio sidechain needed.
 
 ![Ducker main page: Channel 1, Trigger C1, Mode Trigger, Depth; the duck envelope over one beat with the meter mid-duck; Target Volume](docs/main-volume.png)
 
-*Main page with the default settings at 120 BPM, caught mid-duck. Drawn by Schwung's page preview with the module's own graphics, at 4x; Move's screen is 128x64.*
+*Main page, default settings at 120 BPM, mid-duck. Rendered at 4x from Schwung's page preview.*
 
 ## Setup
 
-1. Load **Ducker** as an audio FX on the slot you want to pump (pads, bass, a whole mix).
-2. Send the trigger note from another track, for example the drum track that plays the kick. Set that track's MIDI Out to a channel (Shift + Track).
-3. On Ducker, set **Channel** to that channel (or **Omni**) and **Trigger** to the kick's note. Default: channel 1, note C1 (MIDI 36).
-
-Only that one note on that channel triggers the duck. Every other note is ignored.
+Load as an audio FX on the slot to duck. Set **Channel** and **Trigger** to the kick's MIDI channel and note (set the drum track's MIDI Out with Shift + Track). Only that note on that channel triggers.
 
 ## Controls
 
@@ -22,74 +18,46 @@ Only that one note on that channel triggers the duck. Every other note is ignore
 | **Volume** | Curve | Vel Sens | Retrig | | | | | |
 | **Filter** | Curve | Vel Sens | Retrig | | Cut1 | Cut2 | Res | Type |
 
-The second page depends on Target: **Volume** for Volume and Volume Inv, **Filter** for Filter.
+The second page follows Target: **Filter** for Filter, **Volume** otherwise.
 
-| Control | Range | Default | What it does |
+| Control | Range | Default | Notes |
 |---|---|---|---|
-| Channel | Omni, 1-16 | 1 | MIDI channel the trigger note comes in on |
-| Trigger | C-2 to G8 | C1 | The note that triggers the duck |
-| Mode | Trigger, Gate | Trigger | See [Mode](#mode) |
-| Depth | 0-100% | 100% | How far the duck goes. 100% = silent (Volume) or all the way to Cut2 (Filter) |
-| Attack | 0-50 ms | 5 ms | Time to duck down |
-| Hold | 0-500 ms | 100 ms | Time spent fully ducked (Trigger mode only) |
-| Release | 0-1000 ms | 300 ms | Time to come back up |
-| Target | Volume, Volume Inv, Filter | Volume | See [Targets](#targets) |
-| Curve | Linear, Expo, S-Curve, Pump | Linear | Shape of the duck, see [Curves](#curves) |
-| Vel Sens | 0-100% | 0% | How much the trigger's velocity scales Depth |
-| Retrig | Hard, Soft | Soft | What a new hit does while a duck is still running |
-| Cut1 | 20 Hz-20 kHz | ~9.9 kHz | Filter cutoff while idle |
-| Cut2 | 20 Hz-20 kHz | ~41 Hz | Filter cutoff at full duck |
-| Res | 0-90% | 20% | Filter resonance |
-| Type | LP12, LP24, HP12, HP24 | LP24 | Low-pass or high-pass, 12 or 24 dB per octave |
+| Channel | Omni, 1-16 | 1 | |
+| Trigger | C-2 to G8 | C1 (36) | |
+| Mode | Trigger, Gate | Trigger | Gate: duck holds while the note is held, Hold is ignored |
+| Depth | 0-100% | 100% | |
+| Attack | 0-50 ms | 5 ms | |
+| Hold | 0-500 ms | 100 ms | |
+| Release | 0-1000 ms | 300 ms | |
+| Target | Volume, Volume Inv, Filter | Volume | |
+| Curve | Linear, Expo, S-Curve, Pump | Linear | Applies to attack and release. Pump: linear attack, ease-out release |
+| Vel Sens | 0-100% | 0% | At 100%, velocity 127 gets full Depth |
+| Retrig | Hard, Soft | Soft | See below |
+| Cut1 | 20 Hz-20 kHz | 9.9 kHz | Cutoff at rest |
+| Cut2 | 20 Hz-20 kHz | 41 Hz | Cutoff at full Depth |
+| Res | 0-90% | 20% | |
+| Type | LP12, LP24, HP12, HP24 | LP24 | |
 
 ## Targets
 
-- **Volume**: the classic duck. The signal plays at full volume and dips on every trigger.
-- **Volume Inv**: the other way round. While the transport plays, the signal rests at 1 - Depth (silent at Depth 100%) and each trigger opens it up, to full volume at velocity 127. Use it for gated or "reverse pump" sounds that only speak on the kick. While the transport is stopped, the signal passes at full volume, so a stopped Set is never silent. The change between the two glides over about 10 ms, so starting or stopping makes no click.
-- **Filter**: the trigger sweeps a filter from Cut1 to Cut2 and back. The sweep runs in octaves, so half the Depth lands halfway between the two cutoffs in pitch. At less than 100% Depth the sweep stops short of Cut2.
-  - Low-pass (the default): Cut1 high, Cut2 low. The sound gets dark on the kick and opens up again.
-  - High-pass: set Cut1 low and Cut2 high. The low end drops out on the kick.
-  - The cutoff knobs have 128 steps on a log scale. Hold or turn one to see its frequency in Hz.
+- **Volume**: ducks the gain by Depth.
+- **Volume Inv**: rests at 1 - Depth and opens to full on each trigger. Rests only while the transport runs; stopped, the signal passes at full level.
+- **Filter**: sweeps the cutoff from Cut1 towards Cut2 by Depth, in octaves. For high-pass, set Cut1 low and Cut2 high. Cutoffs have 128 log steps; hold a cutoff knob to see Hz.
 
-![Cut2 card over the Filter page: Cut2, 41 Hz, with a marker near the low end of the 20 Hz to 20 kHz scale](docs/filter-cutoff-card.png)
+![Cut2 card over the Filter page: Cut2, 41 Hz](docs/filter-cutoff-card.png)
 
-*Holding Cut2 at its default: 41 Hz.*
+## Retrig
 
-## Mode
+- **Hard**: a new hit restarts the duck from fully open.
+- **Soft**: a new hit continues from the current level along the attack curve, so full duck still lands one attack time after the hit. A hit asking for less depth keeps the deeper level.
 
-- **Trigger**: each note-on plays the full envelope: Attack, Hold, Release. Note length does not matter.
-- **Gate**: the duck holds as long as the note is held and releases on note-off. Hold is not used. A note shorter than the attack (a typical drum hit) still finishes the attack first, so every hit ducks the same amount.
-
-## Curves
-
-The curve shapes both the way down (attack) and the way back up (release).
-
-- **Linear**: a straight line.
-- **Expo**: starts slow and speeds up. On release the sound stays down longer, then comes back quickly.
-- **S-Curve**: slow at both ends, fast in the middle. The smoothest of the four.
-- **Pump**: straight attack, release that comes back fast and then levels off. The classic pumping sound.
-
-## Velocity
-
-**Vel Sens** sets how much the trigger's velocity matters. At 0% every hit ducks by the full Depth. At 100% a hit at velocity 127 gets the full Depth and a soft hit gets almost none. Values between mix the two. Harder hits always duck deeper, never less.
-
-## Retrigger
-
-What happens when a new hit arrives while the last duck is still running:
-
-- **Hard**: the duck restarts from fully open, so a fast run of hits can click or flutter.
-- **Soft** (default): the duck carries on from where it is. The attack keeps its slope, so it always reaches full duck at the same time after the hit. A hit that asks for less depth than is already ducked keeps the deeper level.
+In Gate mode a note shorter than the attack still completes the attack.
 
 ## Display
 
-Attack, Hold and Release share one graphic:
+The envelope spans one beat at the current tempo; notches mark 16ths. The meter shows the current gain (Volume Inv: low at rest, full on trigger).
 
-- The envelope shows the duck over one beat (a quarter note) at the current tempo, so the right edge is where the next kick on the beat lands. Notches along the bottom mark 16th notes. Ducks longer than a beat run off the edge.
-- The meter at the right shows the level right now. For Volume and Filter, a full bar means no ducking, and the lowest it goes is the hold level. For Volume Inv it is the other way up: low at rest, full on each trigger.
-
-![Main page with Target Volume Inv at Depth 80%: the envelope drawn upside down, full on the trigger and falling back, and the meter low at rest](docs/main-volume-inv.png)
-
-*Volume Inv at Depth 80%, at rest: the meter sits at 20%, and the envelope shows the volume opening up on each trigger.*
+![Main page, Target Volume Inv at Depth 80%, at rest](docs/main-volume-inv.png)
 
 ## Build and install
 
@@ -98,7 +66,7 @@ Attack, Hold and Release share one graphic:
 ./scripts/install.sh   # copies dist/ducker to move.local over ssh
 ```
 
-Or install from the Schwung Module Store.
+Also available in the Schwung Module Store.
 
 ## AI Assistance Disclaimer
 
