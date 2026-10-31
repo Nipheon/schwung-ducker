@@ -2,6 +2,10 @@
 
 MIDI-triggered sidechain ducker for [Schwung](https://github.com/charlesvestal/schwung) on Ableton Move. Classic pumping without an audio sidechain: a MIDI note, usually the kick, ducks the signal and lets it come back. The duck can work on the volume, on the volume turned upside down, or as a filter sweep.
 
+![Ducker main page: Channel 1, Trigger C1, Mode Trigger, Depth; the duck envelope over one beat with the meter mid-duck; Target Volume](docs/main-volume.png)
+
+*Main page with the default settings at 120 BPM, caught mid-duck. Drawn by Schwung's page preview with the module's own graphics, at 4x; Move's screen is 128x64.*
+
 ## Setup
 
 1. Load **Ducker** as an audio FX on the slot you want to pump (pads, bass, a whole mix).
@@ -47,6 +51,10 @@ The second page depends on Target: **Volume** for Volume and Volume Inv, **Filte
   - High-pass: set Cut1 low and Cut2 high. The low end drops out on the kick.
   - The cutoff knobs have 128 steps on a log scale. Hold or turn one to see its frequency in Hz.
 
+![Cut2 card over the Filter page: Cut2, 41 Hz, with a marker near the low end of the 20 Hz to 20 kHz scale](docs/filter-cutoff-card.png)
+
+*Holding Cut2 at its default: 41 Hz.*
+
 ## Mode
 
 - **Trigger**: each note-on plays the full envelope: Attack, Hold, Release. Note length does not matter.
@@ -78,6 +86,10 @@ Attack, Hold and Release share one graphic:
 
 - The envelope shows the duck over one beat (a quarter note) at the current tempo, so the right edge is where the next kick on the beat lands. Notches along the bottom mark 16th notes. Ducks longer than a beat run off the edge.
 - The meter at the right shows the level right now. For Volume and Filter, a full bar means no ducking, and the lowest it goes is the hold level. For Volume Inv it is the other way up: low at rest, full on each trigger.
+
+![Main page with Target Volume Inv at Depth 80%: the envelope drawn upside down, full on the trigger and falling back, and the meter low at rest](docs/main-volume-inv.png)
+
+*Volume Inv at Depth 80%, at rest: the meter sits at 20%, and the envelope shows the volume opening up on each trigger.*
 
 ## Build and install
 
